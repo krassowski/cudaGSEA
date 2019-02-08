@@ -1,6 +1,10 @@
 #ifndef CUDA_GSEA_STATISTICS_CUH
 #define CUDA_GSEA_STATISTICS_CUH
 
+#define FDR_DISABLED 0
+#define FDR_GSEA_ORIGINAL 1
+#define FDR_FAST_APPROXIMATE 2
+
 #include <vector>
 
 template <class enrch_t, class index_t>
@@ -48,7 +52,7 @@ enrch_t compute_fdr_q(const enrch_t * scores,
                       const enrch_t * random_scores,
                       const index_t num_paths,
                       const index_t num_perms,
-                      const index_t index_to_ignore,  // index of random scores corresponding to score
+                      const index_t score_index,
                       const enrch_t score) {
 
     // more extreme than observed NES* in sets (S)
@@ -66,7 +70,6 @@ enrch_t compute_fdr_q(const enrch_t * scores,
     enrch_t non_empty_sets_count = 0;
 
     for (index_t other = 0; other < num_paths; other++) {
-
         if (score >= 0) {
 
             // count of NES(S, π) such that: NES(S, π) ≥ NES*
@@ -109,8 +112,7 @@ enrch_t compute_fdr_q(const enrch_t * scores,
 
     if (denominator == 0)
         return 0;
-    else
-    {
+    else {
         enrch_t q = numerator / denominator;
 
         // q-value is an estimate of FDR so it does not have to be strictly lower than 1;
@@ -124,11 +126,51 @@ enrch_t compute_fdr_q(const enrch_t * scores,
 
 }
 
+template <class enrch_t, class index_t>
+enrch_t approximate_fdr_q(const enrch_t * scores,
+                          const enrch_t * random_scores,
+                          const index_t num_paths,
+                          const index_t num_perms,
+                          const index_t score_index,
+                          const enrch_t score) {
+
+    enrch_t more_extreme_observed = 0;
+    enrch_t more_extreme_random = 0;
+
+    for (index_t other = 0; other < num_paths; other++) {
+
+        if (score >= 0) {
+            more_extreme_random += pos_tail_count(&random_scores[other*num_perms], num_perms, score);
+            if (scores[other] >= score)
+                more_extreme_observed += 1;
+        }
+        else {
+            more_extreme_random += neg_tail_count(&random_scores[other*num_perms], num_perms, score);
+            if (scores[other] <= score)
+                more_extreme_observed += 1;
+        }
+
+    }
+    enrch_t numerator = more_extreme_random / (enrch_t) ((num_paths - 1) * num_perms);
+    enrch_t denominator = more_extreme_observed / (enrch_t) (num_paths - 1);
+
+    if (denominator == 0)
+        return 0;
+    else {
+        enrch_t q = numerator / denominator;
+
+        if(q > 1)
+            return 1;
+
+        return q;
+    }
+}
 
 template <class enrch_t, class index_t> __host__
 std::vector<enrch_t> final_statistics(std::vector<enrch_t>& enrchScores,
                                       const index_t num_paths,
-                                      const index_t num_perms) {
+                                      const index_t num_perms,
+                                      const index_t fdr_mode) {
 
     // 5 since (ES, NES, p-value, FWER, FDR) for each path
     // data is stored in a struct of arrays
@@ -171,7 +213,6 @@ std::vector<enrch_t> final_statistics(std::vector<enrch_t>& enrchScores,
         result[3*num_paths+path] = factor_positive;
         result[4*num_paths+path] = factor_negative;
 
-
         // Interestingly, the joined-normalisation produced results
         // closer to those from GSEA desktop in some comparisons...
         // leaving the code here for now - just in case.
@@ -184,6 +225,7 @@ std::vector<enrch_t> final_statistics(std::vector<enrch_t>& enrchScores,
         result[3*num_paths+path] = factor;
         result[4*num_paths+path] = factor;
         */
+
     }
 
     // compute nominal p-values for each path
@@ -235,20 +277,35 @@ std::vector<enrch_t> final_statistics(std::vector<enrch_t>& enrchScores,
         result[3*num_paths+path] = p_value/num_perms;
     }
 
-    // FDR-Q: computed for all scores.
-    for (index_t path = 0; path < num_paths; path++) {
+    if (fdr_mode != FDR_DISABLED) {
 
-        // normalized enrichment score
-        enrch_t score = result[num_paths+path];
+        enrch_t (*compute_fdr)(const enrch_t *,
+                               const enrch_t *,
+                               const index_t,
+                               const index_t,
+                               const index_t,
+                               const enrch_t) = compute_fdr_q;
 
-        result[4*num_paths+path] = compute_fdr_q(
-            &result[num_paths],       // real scores
-            enrchScores.data(),       // random scores
-            num_paths,
-            num_perms,
-            path,
-            score
-        );
+        if (fdr_mode == FDR_GSEA_ORIGINAL)
+            compute_fdr = compute_fdr_q;
+        else if (fdr_mode == FDR_FAST_APPROXIMATE)
+            compute_fdr = approximate_fdr_q;
+
+        // FDR-Q: computed for all scores.
+        for (index_t path = 0; path < num_paths; path++) {
+
+            // normalized enrichment score
+            enrch_t score = result[num_paths+path];
+
+            result[4*num_paths+path] = compute_fdr(
+                &result[num_paths],       // real scores
+                enrchScores.data(),       // random scores
+                num_paths,
+                num_perms,
+                path,
+                score
+            );
+        }
     }
 
     return result;

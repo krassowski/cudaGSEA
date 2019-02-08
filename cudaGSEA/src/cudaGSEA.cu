@@ -29,6 +29,7 @@ int main (int argc, char * argv[]) {
         auto is_prc = cmd_option_exists(argv, argv+argc, "-precision");
         auto is_gpu = cmd_option_exists(argv, argv+argc, "-gpu");
         auto is_cpu = cmd_option_exists(argv, argv+argc, "-cpu");
+        auto is_fdr = cmd_option_exists(argv, argv+argc, "-fdr");
 
         ///////////////////////////////////////////////////////////////////////
         // parsing flag options
@@ -157,6 +158,22 @@ int main (int argc, char * argv[]) {
             exit(CUDA_GSEA_GPU_AND_CPU_SET_ERROR);
         }
 
+        // full fdr enabled by default
+        int fdr_mode = FDR_GSEA_ORIGINAL;
+        if (is_fdr) {
+            auto chosen_fdr_mode = get_cmd_option(argv, argv + argc, "-fdr");
+            if (!chosen_fdr_mode.compare("disabled"))
+                fdr_mode = FDR_DISABLED;
+            else if (!chosen_fdr_mode.compare("approximate"))
+                fdr_mode = FDR_FAST_APPROXIMATE;
+            else if (chosen_fdr_mode.compare("full") != 0) {
+                std::cout << "ERROR: option specified with -fdr must be: "
+                          << "full, disabled or approximate. Exiting."
+                          << std::endl;
+                exit(CUDA_GSEA_INVALID_FDR_SPECIFIED_ERROR);
+            }
+        }
+
         ///////////////////////////////////////////////////////////////////////
         // the calls
         ///////////////////////////////////////////////////////////////////////
@@ -171,20 +188,20 @@ int main (int argc, char * argv[]) {
             if (is_cpu)
                 compute_gsea_cpu<float, index_t, label_t, bitmap32_t, float>
                                 (gct_file, cls_file, gmt_file, metric, nperm,
-                                 sort_direction, false, dump_filename);
+                                 sort_direction, false, dump_filename, fdr_mode);
             else
                 compute_gsea_gpu<float, index_t, label_t, bitmap32_t, float>
                                 (gct_file, cls_file, gmt_file, metric, nperm,
-                                 sort_direction, false, dump_filename);
+                                 sort_direction, false, dump_filename, fdr_mode);
         else
             if (is_cpu)
                 compute_gsea_cpu<double, index_t, label_t, bitmap64_t, double>
                                 (gct_file, cls_file, gmt_file, metric, nperm,
-                                 sort_direction, false, dump_filename);
+                                 sort_direction, false, dump_filename, fdr_mode);
             else
                 compute_gsea_gpu<double, index_t, label_t, bitmap64_t, double>
                                 (gct_file, cls_file, gmt_file, metric, nperm,
-                                 sort_direction, false, dump_filename);
+                                 sort_direction, false, dump_filename, fdr_mode);
 
         TIMERSTOP(overall)
     }

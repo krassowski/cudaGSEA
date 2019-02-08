@@ -96,6 +96,7 @@ void read_gct(const std::string filename,
                 gene_symbol_set.insert(gsymb[gene]);
             } else {
                 std::cout << "Error: duplicate symbol " << gsymb[gene]
+                          << " at line " << (gene + 3)
                           << " , exiting." << std::endl;
                 exit(CUDA_GSEA_DUPLICATE_GENE_SYMBOL_ERROR);
             }

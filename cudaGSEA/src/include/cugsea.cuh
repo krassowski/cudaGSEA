@@ -4,6 +4,7 @@
 #include <iostream>                         // std::cout
 #include <vector>                           // std::vector
 #include <iomanip>                          // std::setprecision
+#include <math.h>
 
 // CUDA helpers
 #include "cuda_helpers.cuh"                 // convenience cmds, errors
@@ -37,7 +38,8 @@ void compute_gsea_gpu(
     index_t num_perms,                      // number of permutations (incl. e)
     bool sort_direction=true,               // 1: descending, 0: ascending
     bool swap_labels=false,                 // 1: swap phenotypes, 0: as is
-    std::string dump_filename="") {
+    std::string dump_filename="",
+    index_t fdr_mode=FDR_GSEA_ORIGINAL) {
 
     // make sure the user does not use bool as label_t to avoid problems
     static_assert(!std::is_same<label_t, bool>::value,
@@ -245,14 +247,14 @@ void compute_gsea_gpu(
     }
 
     // write the result to command line
-    auto result = final_statistics(global_result, num_paths, num_perms);
+    auto result = final_statistics(global_result, num_paths, num_perms, fdr_mode);
     for (index_t path = 0; path < num_paths; path++) {
         std::cout << std::showpos << std::fixed << "RESULT:"
                   << " ES: "   << result[path]
                   << " NES: "  << result[1*num_paths+path]
                   << " NP: "   << result[2*num_paths+path]
                   << " FWER: " << result[3*num_paths+path]
-                  << " FDR: "  << result[4*num_paths+path]
+                  << " FDR: "  << ((fdr_mode == FDR_DISABLED) ? NAN : result[4*num_paths+path])
                   << "\t(" << pname[path] << ")" << std::endl;
     }
 
@@ -279,7 +281,8 @@ void compute_gsea_cpu(
     index_t num_perms,                      // number of permutations (incl. e)
     bool sort_direction=true,               // 1: descending, 0: ascending
     bool swap_labels=false,                 // 1: swap phenotypes, 0: as is
-    std::string dump_filename="") {
+    std::string dump_filename="",
+    index_t fdr_mode=FDR_GSEA_ORIGINAL) {
 
     // make sure the user does not use bool as label_t to avoid problems
     static_assert(!std::is_same<label_t, bool>::value,
@@ -434,14 +437,14 @@ void compute_gsea_cpu(
     }
 
     // write the result to command line
-    auto result = final_statistics(global_result, num_paths, num_perms);
+    auto result = final_statistics(global_result, num_paths, num_perms, fdr_mode);
     for (index_t path = 0; path < num_paths; path++) {
         std::cout << std::showpos << std::fixed << "RESULT:"
                   << " ES: "   << result[path]
                   << " NES: "  << result[1*num_paths+path]
                   << " NP: "   << result[2*num_paths+path]
                   << " FWER: " << result[3*num_paths+path]
-                  << " FDR: " <<  result[4*num_paths+path]
+                  << " FDR: "  << ((fdr_mode == FDR_DISABLED) ? NAN : result[4*num_paths+path])
                   << "\t(" << pname[path] << ")" << std::endl;
     }
 

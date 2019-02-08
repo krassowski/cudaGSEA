@@ -397,7 +397,8 @@ std::vector<enrch_t> gsea_proxy(
     TIMERSTOP(host_and_device_overall)
     #endif
 
-    return final_statistics(global_result, num_paths, num_perms);
+    // TODO: support FDR via R proxy
+    return final_statistics(global_result, num_paths, num_perms, (size_t) FDR_DISABLED);
 }
 
 std::vector<float> gsea_single_proxy(
